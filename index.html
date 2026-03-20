@@ -1,0 +1,814 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>課表查詢與代課媒合系統</title>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<style>
+:root {
+  --primary: #7EB3D4;
+  --primary-dark: #5A96BA;
+  --primary-light: #A3CCDF;
+  --primary-pale: #D4E8F3;
+  --bg: #F3F7FA;
+  --card: #fff;
+  --text: #2D3748;
+  --text-light: #6B8094;
+  --border: #CDDAE5;
+  --success: #7BAF8E;
+  --warning: #C9A96E;
+  --danger: #C27C7C;
+  --accent: #E6F0F7;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Microsoft JhengHei', 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+
+/* Header */
+.header { background: var(--primary-dark); color: #fff; padding: 14px 24px; display: flex; align-items: center; justify-content: space-between; box-shadow: 0 2px 8px rgba(0,0,0,.1); position: sticky; top: 0; z-index: 100; }
+.header h1 { font-size: 20px; font-weight: 600; letter-spacing: 1px; }
+.header .semester-info { font-size: 14px; opacity: .9; }
+
+/* Tab buttons - matching screenshot style */
+.tab-bar { display: flex; justify-content: center; padding: 20px 16px 0; gap: 0; }
+.tab-btn { flex: 1; max-width: 260px; padding: 12px 20px; font-size: 15px; font-weight: 600; border: 2px solid var(--primary); cursor: pointer; transition: all .2s; background: #fff; color: var(--primary-dark); font-family: inherit; letter-spacing: .5px; }
+.tab-btn:first-child { border-radius: 8px 0 0 8px; }
+.tab-btn:last-child { border-radius: 0 8px 8px 0; }
+.tab-btn:not(:first-child) { border-left: none; }
+.tab-btn.active { background: var(--primary); color: #fff; }
+.tab-btn:hover:not(.active) { background: var(--primary-pale); }
+
+/* Main content */
+.main { max-width: 1100px; margin: 0 auto; padding: 20px; }
+.panel { display: none; }
+.panel.active { display: block; }
+
+/* Card */
+.card { background: var(--card); border-radius: 12px; box-shadow: 0 1px 4px rgba(0,0,0,.06); padding: 24px; margin-bottom: 20px; }
+.card h2 { font-size: 17px; margin-bottom: 16px; color: var(--primary-dark); font-weight: 600; }
+
+/* Form */
+label { font-size: 13px; font-weight: 600; display: block; margin-bottom: 4px; color: var(--text-light); }
+select, input[type=text] { width: 100%; padding: 10px 12px; border: 1.5px solid var(--border); border-radius: 8px; font-size: 14px; margin-bottom: 12px; font-family: inherit; background: #fff; color: var(--text); }
+select:focus, input:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(123,156,181,.2); }
+.form-row { display: flex; gap: 14px; flex-wrap: wrap; align-items: flex-end; }
+.form-row > div { flex: 1; min-width: 160px; }
+
+/* Buttons */
+.btn { padding: 10px 28px; border: none; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; transition: all .2s; font-family: inherit; letter-spacing: .5px; }
+.btn-primary { background: var(--primary); color: #fff; }
+.btn-primary:hover { background: var(--primary-dark); }
+
+/* Schedule table */
+.schedule-table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 12px; table-layout: fixed; }
+.schedule-table th { background: var(--primary); color: #fff; padding: 10px 6px; text-align: center; font-weight: 500; }
+.schedule-table td { border: 1px solid #e0e0e0; padding: 8px 6px; text-align: center; vertical-align: top; }
+.schedule-table tr:nth-child(even) td { background: #fafbfc; }
+.schedule-table .period-col { width: 60px; font-weight: 600; background: var(--accent) !important; color: var(--primary-dark); }
+.schedule-table .cell-subject { font-weight: 600; color: var(--text); }
+.schedule-table .cell-teacher { font-size: 12px; color: var(--primary-dark); margin-top: 2px; }
+.schedule-table .cell-class { font-size: 12px; color: var(--warning); margin-top: 2px; }
+.schedule-table .cell-room { font-size: 11px; color: var(--text-light); margin-top: 2px; }
+.schedule-table .cell-empty { color: #ccc; }
+.schedule-table td.highlight-period { background: #FFF8E1 !important; border: 2px solid var(--warning); }
+
+/* Sub result */
+.sub-section { margin-bottom: 16px; }
+.sub-section h3 { font-size: 14px; margin-bottom: 8px; padding: 8px 12px; border-radius: 6px; font-weight: 600; }
+.sub-section h3.priority-1 { background: #E8F0E8; color: #3D6B4F; }
+.sub-section h3.priority-2 { background: #F5EFE0; color: #8B6914; }
+.sub-section h3.priority-homeroom { background: #E8EDF5; color: #4A5D80; }
+.sub-section h3.no-match { background: #F5E8E8; color: #8B4444; }
+.sub-list { list-style: none; padding: 0; }
+.sub-list li { padding: 10px 14px; border: 1px solid var(--border); border-radius: 8px; margin-bottom: 6px; display: flex; justify-content: space-between; align-items: center; background: #fff; }
+.sub-list li:hover { background: var(--accent); }
+.sub-teacher-name { font-weight: 600; }
+.sub-teacher-dept { font-size: 13px; color: var(--text-light); }
+.sub-teacher-subjects { font-size: 12px; color: var(--primary-dark); }
+
+/* Period checks */
+.period-checks { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+.period-check { display: flex; align-items: center; gap: 4px; }
+.period-check input[type=checkbox] { width: 18px; height: 18px; cursor: pointer; accent-color: var(--primary); }
+.period-check label { margin-bottom: 0; cursor: pointer; font-size: 14px; }
+
+/* Import area */
+.import-area { border: 2px dashed var(--border); border-radius: 12px; padding: 40px; text-align: center; cursor: pointer; transition: all .2s; }
+.import-area:hover, .import-area.dragover { border-color: var(--primary); background: var(--accent); }
+.import-area p { margin-top: 8px; color: var(--text-light); font-size: 14px; }
+.import-area .icon { font-size: 48px; }
+
+/* Status */
+.status { padding: 12px 16px; border-radius: 8px; margin-top: 12px; font-size: 14px; }
+.status-success { background: #E8F0E8; color: #3D6B4F; }
+.status-error { background: #F5E8E8; color: #8B4444; }
+.status-info { background: var(--accent); color: var(--primary-dark); }
+
+/* Homeroom info */
+.homeroom-info { background: var(--accent); padding: 10px 14px; border-radius: 8px; margin-bottom: 12px; font-size: 14px; }
+.homeroom-info strong { color: var(--primary-dark); }
+
+/* Tags */
+.tag { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 12px; margin-left: 6px; }
+.tag-free { background: #E8F0E8; color: #3D6B4F; }
+.tag-homeroom { background: #E8EDF5; color: #4A5D80; }
+
+/* Data stats */
+.data-stats { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 12px; }
+.stat-item { background: var(--accent); padding: 12px 20px; border-radius: 8px; text-align: center; min-width: 100px; }
+.stat-item .num { font-size: 22px; font-weight: 700; color: var(--primary-dark); }
+.stat-item .label { font-size: 12px; color: var(--text-light); margin-top: 2px; }
+
+/* Checkbox toggle */
+.option-check { display: flex; align-items: center; gap: 6px; margin-bottom: 14px; font-size: 14px; }
+.option-check input { accent-color: var(--primary); width: 16px; height: 16px; }
+
+/* Table wrapper */
+.table-wrapper { overflow-x: auto; }
+
+/* Dropdown */
+.search-input-wrap { position: relative; }
+.search-input-wrap .dropdown { position: absolute; top: 100%; left: 0; right: 0; background: #fff; border: 1.5px solid var(--border); border-radius: 0 0 8px 8px; max-height: 200px; overflow-y: auto; z-index: 50; display: none; box-shadow: 0 4px 12px rgba(0,0,0,.08); }
+.search-input-wrap .dropdown.show { display: block; }
+.search-input-wrap .dropdown-item { padding: 8px 12px; cursor: pointer; font-size: 14px; }
+.search-input-wrap .dropdown-item:hover { background: var(--accent); }
+
+/* Import section inside sub-panel bottom */
+.import-toggle { margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--border); }
+.import-toggle summary { cursor: pointer; font-size: 15px; font-weight: 600; color: var(--primary-dark); padding: 8px 0; }
+
+@media print {
+  .header, .tab-bar, .card:not(.schedule-card) { display: none !important; }
+  .main { padding: 0; max-width: 100%; }
+}
+@media (max-width: 768px) {
+  .header h1 { font-size: 16px; }
+  .tab-btn { font-size: 13px; padding: 10px 12px; }
+  .form-row { flex-direction: column; }
+  .form-row > div { min-width: 100%; }
+  .main { padding: 12px; }
+  .card { padding: 16px; }
+}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>課表查詢與代課媒合系統</h1>
+  <div class="semester-info" id="semesterInfo">尚未載入資料</div>
+</div>
+
+<div class="tab-bar">
+  <button class="tab-btn active" data-panel="teacher-panel">教師課表查詢</button>
+  <button class="tab-btn" data-panel="class-panel">班級課表查詢</button>
+  <button class="tab-btn" data-panel="sub-panel">代課教師建議</button>
+</div>
+
+<div class="main">
+
+  <!-- 教師課表 -->
+  <div class="panel active" id="teacher-panel">
+    <div class="card">
+      <h2>教師課表查詢</h2>
+      <div class="form-row">
+        <div>
+          <label>選擇科別</label>
+          <select id="teacherDeptFilter" onchange="onDeptChange()">
+            <option value="">-- 請選擇科別 --</option>
+          </select>
+        </div>
+        <div>
+          <label>選擇教師</label>
+          <select id="teacherSelect">
+            <option value="">-- 請先選擇科別 --</option>
+          </select>
+        </div>
+        <div>
+          <button class="btn btn-primary" onclick="queryTeacherSchedule()">查詢</button>
+        </div>
+      </div>
+    </div>
+    <div id="teacherResult"></div>
+  </div>
+
+  <!-- 班級課表 -->
+  <div class="panel" id="class-panel">
+    <div class="card">
+      <h2>班級課表查詢</h2>
+      <div class="form-row">
+        <div>
+          <label>搜尋班級</label>
+          <div class="search-input-wrap">
+            <input type="text" id="classSearch" placeholder="輸入班級名稱..." autocomplete="off">
+            <div class="dropdown" id="classDropdown"></div>
+          </div>
+        </div>
+        <div>
+          <button class="btn btn-primary" onclick="queryClassSchedule()">查詢</button>
+        </div>
+      </div>
+    </div>
+    <div id="classResult"></div>
+  </div>
+
+  <!-- 代課媒合 -->
+  <div class="panel" id="sub-panel">
+    <div class="card">
+      <h2>代課教師建議</h2>
+      <div class="form-row">
+        <div>
+          <label>請假教師</label>
+          <div class="search-input-wrap">
+            <input type="text" id="subTeacherSearch" placeholder="輸入請假教師姓名..." autocomplete="off">
+            <div class="dropdown" id="subTeacherDropdown"></div>
+          </div>
+        </div>
+        <div>
+          <label>星期</label>
+          <select id="subDay">
+            <option value="1">星期一</option>
+            <option value="2">星期二</option>
+            <option value="3">星期三</option>
+            <option value="4">星期四</option>
+            <option value="5">星期五</option>
+          </select>
+        </div>
+      </div>
+      <div>
+        <label>需代課節次（可複選）</label>
+        <div class="period-checks" id="subPeriods">
+          <div class="period-check"><input type="checkbox" id="p1" value="1"><label for="p1">第1節</label></div>
+          <div class="period-check"><input type="checkbox" id="p2" value="2"><label for="p2">第2節</label></div>
+          <div class="period-check"><input type="checkbox" id="p3" value="3"><label for="p3">第3節</label></div>
+          <div class="period-check"><input type="checkbox" id="p4" value="4"><label for="p4">第4節</label></div>
+          <div class="period-check"><input type="checkbox" id="p5" value="5"><label for="p5">第5節</label></div>
+          <div class="period-check"><input type="checkbox" id="p6" value="6"><label for="p6">第6節</label></div>
+          <div class="period-check"><input type="checkbox" id="p7" value="7"><label for="p7">第7節</label></div>
+          <div class="period-check"><input type="checkbox" id="p8" value="8"><label for="p8">第8節</label></div>
+        </div>
+      </div>
+      <div class="option-check">
+        <input type="checkbox" id="showSameGroup">
+        <label for="showSameGroup" style="margin-bottom:0;font-weight:normal;">同時顯示同科群代課建議</label>
+      </div>
+      <button class="btn btn-primary" onclick="querySubstitute()">查詢代課建議</button>
+    </div>
+    <div id="subResult"></div>
+
+    <!-- 資料匯入 (collapsible) -->
+    <div class="card">
+      <details class="import-toggle">
+        <summary>新學期資料匯入</summary>
+        <p style="color:var(--text-light);font-size:13px;margin:12px 0;">
+          匯入新的 Excel 檔案（.xlsx），將<strong style="color:var(--danger);">覆蓋</strong>現有全部資料。<br>
+          檔案格式需與 ALL.xlsx 相同（包含「教師課表」、「班級課表」、「科群」及導師分頁）。
+        </p>
+        <div class="import-area" id="importArea" onclick="document.getElementById('fileInput').click()">
+          <div class="icon">&#128194;</div>
+          <p><strong>點擊此處</strong>或將檔案拖曳至此</p>
+          <p>支援 .xlsx 格式</p>
+          <input type="file" id="fileInput" accept=".xlsx" style="display:none" onchange="handleFileImport(event)">
+        </div>
+        <div id="importStatus"></div>
+        <div id="dataStats"></div>
+      </details>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ===== Data Store =====
+let DATA = {
+  teacherSchedule: [],
+  classSchedule: [],
+  homeroom: {},        // className -> teacherName
+  teachers: [],
+  classes: [],
+  departments: [],
+  subjectGroups: {},   // groupName -> [dept1, dept2, ...]
+  academicYear: null,
+  semester: null
+};
+
+// ===== Special departments: homeroom/class-teacher priority =====
+const SPECIAL_DEPTS = ['健護', '全民國防', '音樂科'];
+
+function isSpecialDept(dept) {
+  return SPECIAL_DEPTS.includes(dept);
+}
+
+// ===== Subject group helpers =====
+function getGroupForDept(dept) {
+  for (const [group, depts] of Object.entries(DATA.subjectGroups)) {
+    if (depts.includes(dept)) return group;
+  }
+  return null;
+}
+
+function getSameGroupDepts(dept) {
+  for (const [group, depts] of Object.entries(DATA.subjectGroups)) {
+    if (depts.includes(dept)) return depts.filter(d => d !== dept);
+  }
+  return [];
+}
+
+// ===== Tab Switching =====
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById(btn.dataset.panel).classList.add('active');
+  });
+});
+
+// ===== Load =====
+async function loadInitialData() {
+  try {
+    const resp = await fetch('ALL.xlsx');
+    const buf = await resp.arrayBuffer();
+    parseWorkbook(buf);
+    showStatus('importStatus', '已載入預設資料 ALL.xlsx', 'success');
+  } catch (e) {
+    showStatus('importStatus', '無法載入預設資料，請手動匯入 Excel 檔案。', 'info');
+  }
+}
+
+function parseWorkbook(arrayBuffer) {
+  const wb = XLSX.read(arrayBuffer, { type: 'array' });
+
+  // 教師課表
+  if (wb.SheetNames.includes('教師課表')) {
+    DATA.teacherSchedule = XLSX.utils.sheet_to_json(wb.Sheets['教師課表']).map(r => ({
+      academic_year: r.academic_year,
+      semester: r.semester,
+      belong_dep: r.belong_dep || '',
+      target_name: r.target_name || '',
+      day_of_week: Number(r.day_of_week),
+      period: Number(r.period),
+      subject: r.subject || '',
+      taught_name: r.taught_name || '',
+      classroom: r.classroom || ''
+    }));
+  }
+
+  // 班級課表
+  if (wb.SheetNames.includes('班級課表')) {
+    DATA.classSchedule = XLSX.utils.sheet_to_json(wb.Sheets['班級課表']).map(r => ({
+      academic_year: r.academic_year,
+      semester: r.semester,
+      target_name: r.target_name || '',
+      day_of_week: Number(r.day_of_week),
+      period: Number(r.period),
+      subject: r.subject || '',
+      taught_name: r.taught_name || '',
+      classroom: r.classroom || ''
+    }));
+  }
+
+  // 導師
+  DATA.homeroom = {};
+  ['高一導師', '高二導師', '高三導師'].forEach(name => {
+    if (wb.SheetNames.includes(name)) {
+      XLSX.utils.sheet_to_json(wb.Sheets[name]).forEach(r => {
+        if (r['班級'] && r['導師']) DATA.homeroom[r['班級']] = r['導師'];
+      });
+    }
+  });
+
+  // 科群
+  DATA.subjectGroups = {};
+  if (wb.SheetNames.includes('科群')) {
+    const ws = wb.Sheets['科群'];
+    const rows = XLSX.utils.sheet_to_json(ws, { header: 1 });
+    if (rows.length > 0) {
+      const headerRow = rows[0]; // ['科群', '電機群', '設計群', ...]
+      for (let col = 1; col < headerRow.length; col++) {
+        const groupName = headerRow[col];
+        if (!groupName) continue;
+        const depts = [];
+        for (let row = 1; row < rows.length; row++) {
+          if (rows[row][col]) depts.push(rows[row][col]);
+        }
+        DATA.subjectGroups[groupName] = depts;
+      }
+    }
+  }
+
+  // Unique values
+  const teacherSet = new Set();
+  const deptSet = new Set();
+  DATA.teacherSchedule.forEach(r => {
+    if (r.target_name) teacherSet.add(r.target_name);
+    if (r.belong_dep) deptSet.add(r.belong_dep);
+  });
+  DATA.teachers = [...teacherSet].sort();
+  DATA.departments = [...deptSet].sort();
+
+  const classSet = new Set();
+  DATA.classSchedule.forEach(r => { if (r.target_name) classSet.add(r.target_name); });
+  DATA.classes = [...classSet].sort();
+
+  if (DATA.teacherSchedule.length > 0) {
+    DATA.academicYear = DATA.teacherSchedule[0].academic_year;
+    DATA.semester = DATA.teacherSchedule[0].semester;
+  }
+
+  updateUI();
+}
+
+function updateUI() {
+  if (DATA.academicYear) {
+    document.getElementById('semesterInfo').textContent = `${DATA.academicYear} 學年度 第 ${DATA.semester} 學期`;
+  }
+
+  // Department dropdown
+  const deptSel = document.getElementById('teacherDeptFilter');
+  deptSel.innerHTML = '<option value="">-- 請選擇科別 --</option>';
+  DATA.departments.forEach(d => {
+    deptSel.innerHTML += `<option value="${d}">${d}</option>`;
+  });
+
+  // Reset teacher select
+  document.getElementById('teacherSelect').innerHTML = '<option value="">-- 請先選擇科別 --</option>';
+
+  showDataStats();
+}
+
+// ===== Dept -> Teacher linked dropdown =====
+function onDeptChange() {
+  const dept = document.getElementById('teacherDeptFilter').value;
+  const sel = document.getElementById('teacherSelect');
+  if (!dept) {
+    sel.innerHTML = '<option value="">-- 請先選擇科別 --</option>';
+    return;
+  }
+  const deptTeachers = [...new Set(
+    DATA.teacherSchedule.filter(r => r.belong_dep === dept).map(r => r.target_name)
+  )].sort();
+  sel.innerHTML = '<option value="">-- 請選擇教師 --</option>';
+  deptTeachers.forEach(t => {
+    sel.innerHTML += `<option value="${t}">${t}</option>`;
+  });
+}
+
+// ===== Search Dropdown =====
+function setupSearch(inputId, dropdownId, getItems) {
+  const input = document.getElementById(inputId);
+  const dd = document.getElementById(dropdownId);
+  input.addEventListener('input', () => {
+    const q = input.value.trim();
+    if (!q) { dd.classList.remove('show'); return; }
+    const items = getItems(q);
+    if (items.length === 0) { dd.classList.remove('show'); return; }
+    dd.innerHTML = items.map(i => `<div class="dropdown-item">${i}</div>`).join('');
+    dd.classList.add('show');
+    dd.querySelectorAll('.dropdown-item').forEach(el => {
+      el.addEventListener('click', () => { input.value = el.textContent; dd.classList.remove('show'); });
+    });
+  });
+  input.addEventListener('blur', () => setTimeout(() => dd.classList.remove('show'), 200));
+  input.addEventListener('keydown', e => { if (e.key === 'Enter') dd.classList.remove('show'); });
+}
+
+setupSearch('classSearch', 'classDropdown', q => DATA.classes.filter(c => c.includes(q)).slice(0, 20));
+setupSearch('subTeacherSearch', 'subTeacherDropdown', q => DATA.teachers.filter(t => t.includes(q)).slice(0, 20));
+
+// ===== Schedule Rendering =====
+const DAY_NAMES = ['', '一', '二', '三', '四', '五'];
+const PERIOD_LABELS = ['第1節', '第2節', '第3節', '第4節', '第5節', '第6節', '第7節', '第8節'];
+
+function renderScheduleTable(entries, titlePrefix, targetName, highlightPeriods, mode) {
+  const grid = {};
+  for (let p = 1; p <= 8; p++) { grid[p] = {}; for (let d = 1; d <= 5; d++) grid[p][d] = []; }
+  entries.forEach(e => {
+    if (e.day_of_week >= 1 && e.day_of_week <= 5 && e.period >= 1 && e.period <= 8)
+      grid[e.period][e.day_of_week].push(e);
+  });
+
+  let html = `<div class="card schedule-card"><h2>${titlePrefix}：${targetName}</h2>`;
+
+  const homeroomClass = Object.entries(DATA.homeroom).find(([, t]) => t === targetName);
+  if (homeroomClass) html += `<div class="homeroom-info">導師班級：<strong>${homeroomClass[0]}</strong></div>`;
+  const homeroomTeacher = DATA.homeroom[targetName];
+  if (homeroomTeacher) html += `<div class="homeroom-info">導師：<strong>${homeroomTeacher}</strong></div>`;
+
+  html += `<div class="table-wrapper"><table class="schedule-table"><tr><th style="width:60px">節次</th>`;
+  for (let d = 1; d <= 5; d++) html += `<th>星期${DAY_NAMES[d]}</th>`;
+  html += `</tr>`;
+
+  for (let p = 1; p <= 8; p++) {
+    html += `<tr><td class="period-col">${PERIOD_LABELS[p-1]}</td>`;
+    for (let d = 1; d <= 5; d++) {
+      const items = grid[p][d];
+      const hl = highlightPeriods && highlightPeriods.includes(p) ? ' highlight-period' : '';
+      if (!items.length) {
+        html += `<td class="${hl}"><span class="cell-empty">—</span></td>`;
+      } else {
+        html += `<td class="${hl}">`;
+        items.forEach(item => {
+          html += `<div class="cell-subject">${item.subject}</div>`;
+          if (mode === 'teacher') html += `<div class="cell-class">${item.taught_name}</div>`;
+          else if (mode === 'class') html += `<div class="cell-teacher">${item.taught_name}</div>`;
+          else html += `<div class="cell-teacher">${item.taught_name}</div>`;
+          if (item.classroom) html += `<div class="cell-room">${item.classroom}</div>`;
+        });
+        html += `</td>`;
+      }
+    }
+    html += `</tr>`;
+  }
+  html += `</table></div></div>`;
+  return html;
+}
+
+// ===== Teacher Schedule =====
+function queryTeacherSchedule() {
+  const name = document.getElementById('teacherSelect').value;
+  if (!name) { alert('請選擇教師'); return; }
+  const entries = DATA.teacherSchedule.filter(r => r.target_name === name);
+  if (!entries.length) {
+    document.getElementById('teacherResult').innerHTML = `<div class="status status-error">找不到教師「${name}」的課表資料。</div>`;
+    return;
+  }
+  document.getElementById('teacherResult').innerHTML = renderScheduleTable(entries, `教師課表（${entries[0].belong_dep}）`, name, null, 'teacher');
+}
+
+// ===== Class Schedule =====
+function queryClassSchedule() {
+  const name = document.getElementById('classSearch').value.trim();
+  if (!name) { alert('請輸入班級名稱'); return; }
+  const entries = DATA.classSchedule.filter(r => r.target_name === name);
+  if (!entries.length) {
+    document.getElementById('classResult').innerHTML = `<div class="status status-error">找不到班級「${name}」的課表資料。</div>`;
+    return;
+  }
+  document.getElementById('classResult').innerHTML = renderScheduleTable(entries, '班級課表', name, null, 'class');
+}
+
+// ===== Substitute =====
+function findConsecutiveGroups(periods, len) {
+  const sorted = [...periods].sort((a, b) => a - b);
+  const groups = [];
+  for (let i = 0; i <= sorted.length - len; i++) {
+    let ok = true;
+    for (let j = 1; j < len; j++) { if (sorted[i+j] !== sorted[i]+j) { ok = false; break; } }
+    if (ok) groups.push(sorted.slice(i, i + len));
+  }
+  return groups;
+}
+
+function findFreeTeachers(day, periods, excludeTeacher) {
+  const busyByPeriod = {};
+  periods.forEach(p => {
+    busyByPeriod[p] = new Set();
+    DATA.teacherSchedule.forEach(r => {
+      if (r.day_of_week === day && r.period === p) busyByPeriod[p].add(r.target_name);
+    });
+  });
+  return DATA.teachers.filter(t => t !== excludeTeacher && periods.every(p => !busyByPeriod[p].has(t)));
+}
+
+function renderSubList(teachers, teacherDeptMap, teacherSubjects, periodLabel, extraTag) {
+  let html = `<ul class="sub-list">`;
+  teachers.forEach(t => {
+    const subjects = teacherSubjects[t] ? [...teacherSubjects[t]].filter(s => s !== '班會').join('、') : '';
+    const tagClass = extraTag === '導師' ? 'tag-homeroom' : 'tag-free';
+    const tagText = extraTag || periodLabel;
+    html += `<li><div><span class="sub-teacher-name">${t}</span> <span class="sub-teacher-dept">（${teacherDeptMap[t] || ''}）</span><span class="tag ${tagClass}">${tagText}</span></div><div class="sub-teacher-subjects">授課：${subjects}</div></li>`;
+  });
+  html += `</ul>`;
+  return html;
+}
+
+function querySubstitute() {
+  const absentTeacher = document.getElementById('subTeacherSearch').value.trim();
+  const day = Number(document.getElementById('subDay').value);
+  const selectedPeriods = [];
+  document.querySelectorAll('#subPeriods input:checked').forEach(cb => selectedPeriods.push(Number(cb.value)));
+  selectedPeriods.sort((a, b) => a - b);
+  const showGroup = document.getElementById('showSameGroup').checked;
+
+  if (!absentTeacher) { alert('請輸入請假教師姓名'); return; }
+  if (!selectedPeriods.length) { alert('請至少選擇一個節次'); return; }
+
+  const teacherEntries = DATA.teacherSchedule.filter(r => r.target_name === absentTeacher);
+  if (!teacherEntries.length) {
+    document.getElementById('subResult').innerHTML = `<div class="status status-error">找不到教師「${absentTeacher}」的資料。</div>`;
+    return;
+  }
+
+  const absentDept = teacherEntries[0].belong_dep;
+  const needSubEntries = teacherEntries.filter(e => e.day_of_week === day && selectedPeriods.includes(e.period));
+
+  if (!needSubEntries.length) {
+    document.getElementById('subResult').innerHTML = `<div class="status status-info">教師「${absentTeacher}」在星期${DAY_NAMES[day]}的所選節次沒有排課。</div>`;
+    return;
+  }
+
+  let html = renderScheduleTable(teacherEntries, `請假教師課表（${absentDept}）`, absentTeacher, selectedPeriods, 'teacher');
+  html += `<div class="card"><h2>代課建議結果</h2>`;
+
+  const neededSubjects = [...new Set(needSubEntries.map(e => e.subject))];
+  // Classes being taught at those periods
+  const affectedClasses = [...new Set(needSubEntries.map(e => e.taught_name))];
+
+  html += `<div style="margin-bottom:16px;">`;
+  html += `<p><strong>請假教師：</strong>${absentTeacher}（${absentDept}）</p>`;
+  html += `<p><strong>星期${DAY_NAMES[day]}，</strong>需代課節次：${selectedPeriods.map(p => `第${p}節`).join('、')}</p>`;
+  html += `<p><strong>需代課科目：</strong>${neededSubjects.join('、')}</p>`;
+  html += `<div style="margin-top:8px;">`;
+  needSubEntries.forEach(e => {
+    html += `<div style="padding:3px 0;font-size:13px;">第${e.period}節：${e.subject}（${e.taught_name}）</div>`;
+  });
+  html += `</div></div>`;
+
+  // Build maps
+  const teacherDeptMap = {};
+  const teacherSubjects = {};
+  DATA.teacherSchedule.forEach(r => {
+    if (r.target_name && r.belong_dep) teacherDeptMap[r.target_name] = r.belong_dep;
+    if (!teacherSubjects[r.target_name]) teacherSubjects[r.target_name] = new Set();
+    teacherSubjects[r.target_name].add(r.subject);
+  });
+
+  const sameGroupDepts = getSameGroupDepts(absentDept);
+  const groupName = getGroupForDept(absentDept);
+  let hasAnyMatch = false;
+
+  // ===== Special dept logic: 健護/全民國防/音樂科 =====
+  if (isSpecialDept(absentDept)) {
+    // For each period, find homeroom teacher and second-priority teachers
+    const homeroomCandidates = new Set();
+    const secondCandidates = new Set();
+
+    affectedClasses.forEach(className => {
+      // Homeroom teacher for this class
+      const ht = DATA.homeroom[className];
+      if (ht && ht !== absentTeacher) homeroomCandidates.add(ht);
+    });
+
+    // Second priority depends on department
+    let secondLabel = '';
+    if (absentDept === '健護') {
+      // 健護: second priority is 體育科 teachers
+      secondLabel = '體育科教師';
+      DATA.teacherSchedule.forEach(r => {
+        if (r.belong_dep === '體育科' && r.target_name !== absentTeacher) {
+          secondCandidates.add(r.target_name);
+        }
+      });
+    } else {
+      // 全民國防/音樂科: second priority is other class teachers
+      secondLabel = '該班其他任課老師';
+      affectedClasses.forEach(className => {
+        DATA.classSchedule.forEach(r => {
+          if (r.target_name === className && r.taught_name) {
+            r.taught_name.split(',').forEach(t => {
+              const name = t.trim();
+              if (name && name !== absentTeacher) secondCandidates.add(name);
+            });
+          }
+        });
+      });
+    }
+
+    // Remove homeroom from second to avoid duplication
+    homeroomCandidates.forEach(t => secondCandidates.delete(t));
+
+    // Filter by free at all selected periods
+    const freeAll = new Set(findFreeTeachers(day, selectedPeriods, absentTeacher));
+
+    const freeHomeroom = [...homeroomCandidates].filter(t => freeAll.has(t));
+    const freeSecond = [...secondCandidates].filter(t => freeAll.has(t));
+
+    if (freeHomeroom.length > 0) {
+      hasAnyMatch = true;
+      html += `<div class="sub-section"><h3 class="priority-homeroom">優先建議：該班導師 — ${freeHomeroom.length} 位</h3>`;
+      html += renderSubList(freeHomeroom, teacherDeptMap, teacherSubjects, '所選節次皆空堂', '導師');
+      html += `</div>`;
+    }
+
+    if (freeSecond.length > 0) {
+      hasAnyMatch = true;
+      html += `<div class="sub-section"><h3 class="priority-2">其次建議：${secondLabel} — ${freeSecond.length} 位</h3>`;
+      html += renderSubList(freeSecond, teacherDeptMap, teacherSubjects, '所選節次皆空堂');
+      html += `</div>`;
+    }
+
+    if (!hasAnyMatch) {
+      html += `<div class="sub-section"><h3 class="no-match">無法媒合</h3>`;
+      html += `<p style="padding:12px;font-size:14px;">該班導師及${secondLabel}在所選時段皆無空堂，<strong>請洽教學組</strong>安排代課。</p></div>`;
+    }
+
+    html += `</div>`;
+    document.getElementById('subResult').innerHTML = html;
+    return;
+  }
+
+  // ===== Normal dept: layered matching =====
+  const periodGroups = [];
+  if (selectedPeriods.length >= 2) {
+    periodGroups.push({ periods: selectedPeriods, label: `全部 ${selectedPeriods.length} 節（第${selectedPeriods[0]}~${selectedPeriods[selectedPeriods.length-1]}節）` });
+    for (let len = selectedPeriods.length - 1; len >= 2; len--) {
+      findConsecutiveGroups(selectedPeriods, len).forEach(g => {
+        periodGroups.push({ periods: g, label: `連續 ${len} 節（第${g[0]}~${g[g.length-1]}節）` });
+      });
+    }
+    selectedPeriods.forEach(p => periodGroups.push({ periods: [p], label: `單節（第${p}節）` }));
+  } else {
+    periodGroups.push({ periods: selectedPeriods, label: `第${selectedPeriods[0]}節` });
+  }
+
+  const shownSameDept = new Set();
+  const shownSameGroup = new Set();
+
+  for (const pg of periodGroups) {
+    const freeTeachers = findFreeTeachers(day, pg.periods, absentTeacher);
+
+    // Same dept
+    const sameDept = freeTeachers.filter(t => teacherDeptMap[t] === absentDept && !shownSameDept.has(t));
+    if (sameDept.length > 0) {
+      hasAnyMatch = true;
+      html += `<div class="sub-section"><h3 class="priority-1">同科代課（${absentDept}）— ${pg.label} — ${sameDept.length} 位</h3>`;
+      html += renderSubList(sameDept, teacherDeptMap, teacherSubjects, pg.label);
+      html += `</div>`;
+      sameDept.forEach(t => shownSameDept.add(t));
+    }
+
+    // Same group (only if checkbox checked)
+    if (showGroup && sameGroupDepts.length > 0) {
+      const sameGroup = freeTeachers.filter(t => sameGroupDepts.includes(teacherDeptMap[t]) && !shownSameGroup.has(t));
+      if (sameGroup.length > 0) {
+        hasAnyMatch = true;
+        html += `<div class="sub-section"><h3 class="priority-2">同科群代課（${groupName}）— ${pg.label} — ${sameGroup.length} 位</h3>`;
+        html += renderSubList(sameGroup, teacherDeptMap, teacherSubjects, pg.label);
+        html += `</div>`;
+        sameGroup.forEach(t => shownSameGroup.add(t));
+      }
+    }
+  }
+
+  if (!hasAnyMatch) {
+    html += `<div class="sub-section"><h3 class="no-match">無法媒合</h3>`;
+    html += `<p style="padding:12px;font-size:14px;">同科${showGroup ? '及同科群' : ''}教師在所選時段皆無空堂，<strong>請洽教學組</strong>安排代課。</p></div>`;
+  }
+
+  html += `</div>`;
+  document.getElementById('subResult').innerHTML = html;
+}
+
+// ===== File Import =====
+function handleFileImport(event) {
+  const file = event.target.files[0];
+  if (file) processFile(file);
+}
+
+function processFile(file) {
+  if (!file.name.endsWith('.xlsx')) {
+    showStatus('importStatus', '請上傳 .xlsx 格式的檔案。', 'error');
+    return;
+  }
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      parseWorkbook(e.target.result);
+      showStatus('importStatus', `已成功匯入「${file.name}」，舊資料已覆蓋。`, 'success');
+    } catch (err) {
+      showStatus('importStatus', `匯入失敗：${err.message}`, 'error');
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+const importArea = document.getElementById('importArea');
+importArea.addEventListener('dragover', e => { e.preventDefault(); importArea.classList.add('dragover'); });
+importArea.addEventListener('dragleave', () => importArea.classList.remove('dragover'));
+importArea.addEventListener('drop', e => {
+  e.preventDefault(); importArea.classList.remove('dragover');
+  const file = e.dataTransfer.files[0];
+  if (file) processFile(file);
+});
+
+function showStatus(id, msg, type) {
+  document.getElementById(id).innerHTML = `<div class="status status-${type}">${msg}</div>`;
+}
+
+function showDataStats() {
+  const el = document.getElementById('dataStats');
+  if (!el) return;
+  el.innerHTML = `<div class="data-stats">
+    <div class="stat-item"><div class="num">${DATA.teachers.length}</div><div class="label">教師</div></div>
+    <div class="stat-item"><div class="num">${DATA.classes.length}</div><div class="label">班級</div></div>
+    <div class="stat-item"><div class="num">${DATA.departments.length}</div><div class="label">科別</div></div>
+    <div class="stat-item"><div class="num">${Object.keys(DATA.homeroom).length}</div><div class="label">導師</div></div>
+    <div class="stat-item"><div class="num">${Object.keys(DATA.subjectGroups).length}</div><div class="label">科群</div></div>
+  </div>`;
+}
+
+// ===== Init =====
+loadInitialData();
+</script>
+</body>
+</html>

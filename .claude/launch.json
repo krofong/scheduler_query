@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "schedule-app",
+      "runtimeExecutable": "/c/Python314/python",
+      "runtimeArgs": ["-m", "http.server", "8080", "--directory", "C:/Users/krofo/Desktop/claude"],
+      "port": 8080
+    }
+  ]
+}

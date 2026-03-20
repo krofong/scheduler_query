@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//c/Users/krofo/AppData/Roaming/Claude/local-agent-mode-sessions/skills-plugin/95120c5f-1b0f-4e0d-8c8b-024cd8cd9d49/445fecca-fde1-44e3-995e-94272ea406fe/**)",
+      "Bash(python -c \":*)",
+      "Bash(pip install:*)",
+      "Bash(chcp)",
+      "Bash(PYTHONIOENCODING=utf-8 python -c \":*)",
+      "mcp__Claude_Preview__preview_start",
+      "Bash(python3 -c \":*)",
+      "Bash(ls *.xlsx)",
+      "Bash(/c/Python314/python -c \"import openpyxl; print\\(''''ok''''\\)\")",
+      "Bash(/c/Python314/python -m pip install openpyxl)",
+      "Bash(/c/Python314/python -c \":*)",
+      "Bash(PYTHONIOENCODING=utf-8 /c/Python314/python -X utf8 -c \":*)"
+    ]
+  }
+}
