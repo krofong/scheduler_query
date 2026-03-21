@@ -93,10 +93,6 @@ select:focus, input:focus { outline: none; border-color: var(--primary); box-sha
 .period-check label { margin-bottom: 0; cursor: pointer; font-size: 14px; }
 
 /* Import area */
-.import-area { border: 2px dashed var(--border); border-radius: 12px; padding: 40px; text-align: center; cursor: pointer; transition: all .2s; }
-.import-area:hover, .import-area.dragover { border-color: var(--primary); background: var(--accent); }
-.import-area p { margin-top: 8px; color: var(--text-light); font-size: 14px; }
-.import-area .icon { font-size: 48px; }
 
 /* Status */
 .status { padding: 12px 16px; border-radius: 8px; margin-top: 12px; font-size: 14px; }
@@ -114,10 +110,6 @@ select:focus, input:focus { outline: none; border-color: var(--primary); box-sha
 .tag-homeroom { background: #E8EDF5; color: #4A5D80; }
 
 /* Data stats */
-.data-stats { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 12px; }
-.stat-item { background: var(--accent); padding: 12px 20px; border-radius: 8px; text-align: center; min-width: 100px; }
-.stat-item .num { font-size: 22px; font-weight: 700; color: var(--primary-dark); }
-.stat-item .label { font-size: 12px; color: var(--text-light); margin-top: 2px; }
 
 /* Checkbox toggle */
 .option-check { display: flex; align-items: center; gap: 6px; margin-bottom: 14px; font-size: 14px; }
@@ -134,8 +126,6 @@ select:focus, input:focus { outline: none; border-color: var(--primary); box-sha
 .search-input-wrap .dropdown-item:hover { background: var(--accent); }
 
 /* Import section inside sub-panel bottom */
-.import-toggle { margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--border); }
-.import-toggle summary { cursor: pointer; font-size: 15px; font-weight: 600; color: var(--primary-dark); padding: 8px 0; }
 
 @media print {
   .header, .tab-bar, .card:not(.schedule-card) { display: none !important; }
@@ -255,24 +245,6 @@ select:focus, input:focus { outline: none; border-color: var(--primary); box-sha
     </div>
     <div id="subResult"></div>
 
-    <!-- 資料匯入 (collapsible) -->
-    <div class="card">
-      <details class="import-toggle">
-        <summary>新學期資料匯入</summary>
-        <p style="color:var(--text-light);font-size:13px;margin:12px 0;">
-          匯入新的 Excel 檔案（.xlsx），將<strong style="color:var(--danger);">覆蓋</strong>現有全部資料。<br>
-          檔案格式需與 ALL.xlsx 相同（包含「教師課表」、「班級課表」、「科群」及導師分頁）。
-        </p>
-        <div class="import-area" id="importArea" onclick="document.getElementById('fileInput').click()">
-          <div class="icon">&#128194;</div>
-          <p><strong>點擊此處</strong>或將檔案拖曳至此</p>
-          <p>支援 .xlsx 格式</p>
-          <input type="file" id="fileInput" accept=".xlsx" style="display:none" onchange="handleFileImport(event)">
-        </div>
-        <div id="importStatus"></div>
-        <div id="dataStats"></div>
-      </details>
-    </div>
   </div>
 
 </div>
@@ -329,9 +301,9 @@ async function loadInitialData() {
     const resp = await fetch('ALL.xlsx');
     const buf = await resp.arrayBuffer();
     parseWorkbook(buf);
-    showStatus('importStatus', '已載入預設資料 ALL.xlsx', 'success');
+    console.log('資料載入完成');
   } catch (e) {
-    showStatus('importStatus', '無法載入預設資料，請手動匯入 Excel 檔案。', 'info');
+    console.error('無法載入資料:', e);
   }
 }
 
@@ -433,7 +405,6 @@ function updateUI() {
   // Reset teacher select
   document.getElementById('teacherSelect').innerHTML = '<option value="">-- 請先選擇科別 --</option>';
 
-  showDataStats();
 }
 
 // ===== Dept -> Teacher linked dropdown =====
@@ -759,53 +730,7 @@ function querySubstitute() {
   document.getElementById('subResult').innerHTML = html;
 }
 
-// ===== File Import =====
-function handleFileImport(event) {
-  const file = event.target.files[0];
-  if (file) processFile(file);
-}
 
-function processFile(file) {
-  if (!file.name.endsWith('.xlsx')) {
-    showStatus('importStatus', '請上傳 .xlsx 格式的檔案。', 'error');
-    return;
-  }
-  const reader = new FileReader();
-  reader.onload = function(e) {
-    try {
-      parseWorkbook(e.target.result);
-      showStatus('importStatus', `已成功匯入「${file.name}」，舊資料已覆蓋。`, 'success');
-    } catch (err) {
-      showStatus('importStatus', `匯入失敗：${err.message}`, 'error');
-    }
-  };
-  reader.readAsArrayBuffer(file);
-}
-
-const importArea = document.getElementById('importArea');
-importArea.addEventListener('dragover', e => { e.preventDefault(); importArea.classList.add('dragover'); });
-importArea.addEventListener('dragleave', () => importArea.classList.remove('dragover'));
-importArea.addEventListener('drop', e => {
-  e.preventDefault(); importArea.classList.remove('dragover');
-  const file = e.dataTransfer.files[0];
-  if (file) processFile(file);
-});
-
-function showStatus(id, msg, type) {
-  document.getElementById(id).innerHTML = `<div class="status status-${type}">${msg}</div>`;
-}
-
-function showDataStats() {
-  const el = document.getElementById('dataStats');
-  if (!el) return;
-  el.innerHTML = `<div class="data-stats">
-    <div class="stat-item"><div class="num">${DATA.teachers.length}</div><div class="label">教師</div></div>
-    <div class="stat-item"><div class="num">${DATA.classes.length}</div><div class="label">班級</div></div>
-    <div class="stat-item"><div class="num">${DATA.departments.length}</div><div class="label">科別</div></div>
-    <div class="stat-item"><div class="num">${Object.keys(DATA.homeroom).length}</div><div class="label">導師</div></div>
-    <div class="stat-item"><div class="num">${Object.keys(DATA.subjectGroups).length}</div><div class="label">科群</div></div>
-  </div>`;
-}
 
 // ===== Init =====
 loadInitialData();
