@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>課表查詢與代課媒合系統</title>
+<title>HCVS課表查詢與代課媒合系統</title>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <style>
 :root {
@@ -775,6 +775,30 @@ function querySubstitute() {
   if (!hasAnyMatch) {
     html += `<div class="sub-section"><h3 class="no-match">無法媒合</h3>`;
     html += `<p style="padding:12px;font-size:14px;">同科${showGroup ? '及同科群' : ''}教師在所選時段皆無空堂，<strong>請洽教學組</strong>安排代課。</p></div>`;
+  }
+
+  // ===== Check uncovered periods =====
+  // Find which individual periods have NO available same-dept (or same-group) teacher at all
+  if (selectedPeriods.length >= 2) {
+    const uncoveredPeriods = [];
+    selectedPeriods.forEach(p => {
+      const freeAtP = findFreeTeachers(day, [p], absentTeacher);
+      const hasSameDept = freeAtP.some(t => teacherDeptMap[t] === absentDept);
+      const hasSameGroup = showGroup && sameGroupDepts.length > 0 && freeAtP.some(t => sameGroupDepts.includes(teacherDeptMap[t]));
+      if (!hasSameDept && !hasSameGroup) {
+        // Find what class this period teaches
+        const entry = needSubEntries.find(e => e.period === p);
+        const info = entry ? `${entry.subject}（${entry.taught_name}）` : '';
+        uncoveredPeriods.push({ period: p, info });
+      }
+    });
+    if (uncoveredPeriods.length > 0) {
+      html += `<div class="sub-section"><h3 class="no-match">以下節次無法媒合代課老師</h3>`;
+      uncoveredPeriods.forEach(u => {
+        html += `<p style="padding:6px 12px;font-size:14px;">第${u.period}節 ${u.info}：同科${showGroup ? '及同科群' : ''}教師皆無空堂，<strong>請洽教學組</strong>安排代課。</p>`;
+      });
+      html += `</div>`;
+    }
   }
 
   html += `</div>`;
