@@ -12,7 +12,8 @@
       "Bash(/c/Python314/python -c \"import openpyxl; print\\(''''ok''''\\)\")",
       "Bash(/c/Python314/python -m pip install openpyxl)",
       "Bash(/c/Python314/python -c \":*)",
-      "Bash(PYTHONIOENCODING=utf-8 /c/Python314/python -X utf8 -c \":*)"
+      "Bash(PYTHONIOENCODING=utf-8 /c/Python314/python -X utf8 -c \":*)",
+      "Bash(cygpath -w /c/Python314/python)"
     ]
   }
 }

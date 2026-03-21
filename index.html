@@ -79,6 +79,14 @@ select:focus, input:focus { outline: none; border-color: var(--primary); box-sha
 .sub-section h3.priority-2 { background: #F5EFE0; color: #8B6914; }
 .sub-section h3.priority-homeroom { background: #E8EDF5; color: #4A5D80; }
 .sub-section h3.no-match { background: #F5E8E8; color: #8B4444; }
+.sub-section h3.priority-swap { background: #EDE8F5; color: #5B4A80; }
+.swap-card { border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; margin-bottom: 8px; background: #FAFAFE; }
+.swap-card:hover { background: #F0EDF7; }
+.swap-card .swap-teacher { font-weight: 600; font-size: 15px; }
+.swap-card .swap-dept { font-size: 13px; color: var(--text-light); }
+.swap-card .swap-detail { font-size: 13px; margin-top: 6px; line-height: 1.7; }
+.swap-card .swap-arrow { color: #7B61B8; font-weight: 600; }
+.swap-card .swap-label { display: inline-block; background: #EDE8F5; color: #5B4A80; padding: 1px 8px; border-radius: 4px; font-size: 12px; margin-right: 6px; }
 .sub-list { list-style: none; padding: 0; }
 .sub-list li { padding: 10px 14px; border: 1px solid var(--border); border-radius: 8px; margin-bottom: 6px; display: flex; justify-content: space-between; align-items: center; background: #fff; }
 .sub-list li:hover { background: var(--accent); }
@@ -152,6 +160,7 @@ select:focus, input:focus { outline: none; border-color: var(--primary); box-sha
   <button class="tab-btn active" data-panel="teacher-panel">教師課表查詢</button>
   <button class="tab-btn" data-panel="class-panel">班級課表查詢</button>
   <button class="tab-btn" data-panel="sub-panel">代課教師建議</button>
+  <button class="tab-btn" data-panel="swap-panel">調課建議</button>
 </div>
 
 <div class="main">
@@ -244,7 +253,48 @@ select:focus, input:focus { outline: none; border-color: var(--primary); box-sha
       <button class="btn btn-primary" onclick="querySubstitute()">查詢代課建議</button>
     </div>
     <div id="subResult"></div>
+  </div>
 
+  <!-- 調課建議 -->
+  <div class="panel" id="swap-panel">
+    <div class="card">
+      <h2>調課建議</h2>
+      <p style="color:var(--text-light);font-size:13px;margin-bottom:14px;">請假教師的課與同班級其他任課老師互換時段，確保雙方均無衝堂。</p>
+      <div class="form-row">
+        <div>
+          <label>請假教師</label>
+          <div class="search-input-wrap">
+            <input type="text" id="swapTeacherSearch" placeholder="輸入請假教師姓名..." autocomplete="off">
+            <div class="dropdown" id="swapTeacherDropdown"></div>
+          </div>
+        </div>
+        <div>
+          <label>星期</label>
+          <select id="swapDay">
+            <option value="1">星期一</option>
+            <option value="2">星期二</option>
+            <option value="3">星期三</option>
+            <option value="4">星期四</option>
+            <option value="5">星期五</option>
+          </select>
+        </div>
+      </div>
+      <div>
+        <label>需調課節次（可複選）</label>
+        <div class="period-checks" id="swapPeriods">
+          <div class="period-check"><input type="checkbox" id="sp1" value="1"><label for="sp1">第1節</label></div>
+          <div class="period-check"><input type="checkbox" id="sp2" value="2"><label for="sp2">第2節</label></div>
+          <div class="period-check"><input type="checkbox" id="sp3" value="3"><label for="sp3">第3節</label></div>
+          <div class="period-check"><input type="checkbox" id="sp4" value="4"><label for="sp4">第4節</label></div>
+          <div class="period-check"><input type="checkbox" id="sp5" value="5"><label for="sp5">第5節</label></div>
+          <div class="period-check"><input type="checkbox" id="sp6" value="6"><label for="sp6">第6節</label></div>
+          <div class="period-check"><input type="checkbox" id="sp7" value="7"><label for="sp7">第7節</label></div>
+          <div class="period-check"><input type="checkbox" id="sp8" value="8"><label for="sp8">第8節</label></div>
+        </div>
+      </div>
+      <button class="btn btn-primary" onclick="querySwap()">查詢調課方案</button>
+    </div>
+    <div id="swapResult"></div>
   </div>
 
 </div>
@@ -445,6 +495,7 @@ function setupSearch(inputId, dropdownId, getItems) {
 
 setupSearch('classSearch', 'classDropdown', q => DATA.classes.filter(c => c.includes(q)).slice(0, 20));
 setupSearch('subTeacherSearch', 'subTeacherDropdown', q => DATA.teachers.filter(t => t.includes(q)).slice(0, 20));
+setupSearch('swapTeacherSearch', 'swapTeacherDropdown', q => DATA.teachers.filter(t => t.includes(q)).slice(0, 20));
 
 // ===== Schedule Rendering =====
 const DAY_NAMES = ['', '一', '二', '三', '四', '五'];
@@ -730,7 +781,160 @@ function querySubstitute() {
   document.getElementById('subResult').innerHTML = html;
 }
 
+// ===== Swap (調課) Logic =====
+function querySwap() {
+  const absentTeacher = document.getElementById('swapTeacherSearch').value.trim();
+  const day = Number(document.getElementById('swapDay').value);
+  const selectedPeriods = [];
+  document.querySelectorAll('#swapPeriods input:checked').forEach(cb => selectedPeriods.push(Number(cb.value)));
+  selectedPeriods.sort((a, b) => a - b);
 
+  if (!absentTeacher) { alert('請輸入請假教師姓名'); return; }
+  if (!selectedPeriods.length) { alert('請至少選擇一個節次'); return; }
+
+  const teacherEntries = DATA.teacherSchedule.filter(r => r.target_name === absentTeacher);
+  if (!teacherEntries.length) {
+    document.getElementById('swapResult').innerHTML = `<div class="status status-error">找不到教師「${absentTeacher}」的資料。</div>`;
+    return;
+  }
+
+  const absentDept = teacherEntries[0].belong_dep;
+  const needSubEntries = teacherEntries.filter(e => e.day_of_week === day && selectedPeriods.includes(e.period));
+
+  // Show teacher schedule with highlights
+  let html = renderScheduleTable(teacherEntries, `請假教師課表（${absentDept}）`, absentTeacher, selectedPeriods, 'teacher');
+
+  // Build teacherDeptMap
+  const teacherDeptMap = {};
+  DATA.teacherSchedule.forEach(r => {
+    if (r.target_name && r.belong_dep) teacherDeptMap[r.target_name] = r.belong_dep;
+  });
+
+  html += buildSwapSuggestions(absentTeacher, day, selectedPeriods, needSubEntries, teacherDeptMap);
+  document.getElementById('swapResult').innerHTML = html;
+}
+
+function buildSwapSuggestions(absentTeacher, absentDay, selectedPeriods, needSubEntries, teacherDeptMap) {
+  // Build absent teacher's full busy map: { "day-period": true }
+  const absentBusy = {};
+  DATA.teacherSchedule.forEach(r => {
+    if (r.target_name === absentTeacher) {
+      absentBusy[`${r.day_of_week}-${r.period}`] = true;
+    }
+  });
+
+  // Build all teachers' busy map
+  const allBusy = {};
+  DATA.teacherSchedule.forEach(r => {
+    if (!allBusy[r.target_name]) allBusy[r.target_name] = {};
+    allBusy[r.target_name][`${r.day_of_week}-${r.period}`] = true;
+  });
+
+  let swapResults = [];
+
+  // For each period the absent teacher needs covered
+  needSubEntries.forEach(entry => {
+    const { period, subject, taught_name: taughtClass, day_of_week: absDay } = entry;
+
+    // Find all other teachers who teach this same class (on any day/period)
+    const classTeachers = new Set();
+    DATA.classSchedule.forEach(r => {
+      if (r.target_name === taughtClass && r.taught_name) {
+        r.taught_name.split(',').forEach(t => {
+          const name = t.trim();
+          if (name && name !== absentTeacher) classTeachers.add(name);
+        });
+      }
+    });
+
+    // For each candidate teacher, find their slots teaching this class
+    classTeachers.forEach(candidate => {
+      const candidateSlots = DATA.teacherSchedule.filter(r =>
+        r.target_name === candidate && r.taught_name === taughtClass
+      );
+
+      candidateSlots.forEach(slot => {
+        const candDay = slot.day_of_week;
+        const candPeriod = slot.period;
+
+        // Skip if same day+period (no point swapping)
+        if (candDay === absDay && candPeriod === period) return;
+
+        // Check 1: Candidate must be FREE at absent teacher's slot (absDay, period)
+        const candidateBusy = allBusy[candidate] || {};
+        if (candidateBusy[`${absDay}-${period}`]) return;
+
+        // Check 2: Absent teacher must be FREE at candidate's slot (candDay, candPeriod)
+        if (absentBusy[`${candDay}-${candPeriod}`]) return;
+
+        // Check 3: The class must also be free at candidate's original slot
+        // (already guaranteed since the class has candidate teaching there)
+
+        // Valid swap!
+        swapResults.push({
+          absentPeriod: period,
+          absentSubject: subject,
+          taughtClass,
+          candidate,
+          candidateDept: teacherDeptMap[candidate] || '',
+          candidateDay: candDay,
+          candidatePeriod: candPeriod,
+          candidateSubject: slot.subject
+        });
+      });
+    });
+  });
+
+  // Group by absent period
+  const byPeriod = {};
+  swapResults.forEach(r => {
+    if (!byPeriod[r.absentPeriod]) byPeriod[r.absentPeriod] = [];
+    byPeriod[r.absentPeriod].push(r);
+  });
+
+  // Build a map of period -> entry info for displaying no-match periods
+  const periodInfo = {};
+  needSubEntries.forEach(e => {
+    periodInfo[e.period] = { subject: e.subject, taughtClass: e.taught_name };
+  });
+
+  let html = `<div class="card"><h2>調課建議（與同班任課老師互換時段）</h2>`;
+  html += `<p style="font-size:13px;color:var(--text-light);margin-bottom:14px;">以下方案為請假教師與同班級其他任課老師互換授課時段，雙方均無衝堂。</p>`;
+
+  // Iterate ALL selected periods (including those with no class)
+  selectedPeriods.forEach(p => {
+    const info = periodInfo[p];
+
+    if (!info) {
+      // Teacher has no class at this period
+      html += `<div class="sub-section"><h3 class="no-match">第${p}節 — 該節無排課</h3>`;
+      html += `<p style="padding:12px;font-size:14px;">教師「${absentTeacher}」在星期${DAY_NAMES[absentDay]}第${p}節無排課，無需調課。</p></div>`;
+      return;
+    }
+
+    const items = byPeriod[p];
+
+    if (items && items.length > 0) {
+      html += `<div class="sub-section"><h3 class="priority-swap">第${p}節 ${info.subject}（${info.taughtClass}）— ${items.length} 個調課方案</h3>`;
+      items.forEach(r => {
+        html += `<div class="swap-card">`;
+        html += `<div><span class="swap-teacher">${r.candidate}</span> <span class="swap-dept">（${r.candidateDept}）</span></div>`;
+        html += `<div class="swap-detail">`;
+        html += `<span class="swap-label">原時段</span>${r.candidate}：星期${DAY_NAMES[r.candidateDay]} 第${r.candidatePeriod}節 教 ${r.candidateSubject}（${r.taughtClass}）<br>`;
+        html += `<span class="swap-label">調課後</span>${r.candidate} <span class="swap-arrow">→</span> 星期${DAY_NAMES[absentDay]} 第${r.absentPeriod}節 教 ${r.candidateSubject}（${r.taughtClass}）<br>`;
+        html += `<span class="swap-label">調課後</span>${absentTeacher} <span class="swap-arrow">→</span> 星期${DAY_NAMES[r.candidateDay]} 第${r.candidatePeriod}節 教 ${r.absentSubject}（${r.taughtClass}）`;
+        html += `</div></div>`;
+      });
+      html += `</div>`;
+    } else {
+      html += `<div class="sub-section"><h3 class="no-match">第${p}節 ${info.subject}（${info.taughtClass}）— 無法調課</h3>`;
+      html += `<p style="padding:12px;font-size:14px;">該節次無法媒合其他任課老師調課，建議改用「代課教師建議」功能或<strong>請洽教學組</strong>。</p></div>`;
+    }
+  });
+
+  html += `</div>`;
+  return html;
+}
 
 // ===== Init =====
 loadInitialData();
