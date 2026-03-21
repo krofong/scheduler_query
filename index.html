@@ -315,6 +315,7 @@ let DATA = {
 
 // ===== Special departments: homeroom/class-teacher priority =====
 const SPECIAL_DEPTS = ['健護', '全民國防', '音樂科'];
+const BLOCKED_DEPTS = ['特教科']; // 不提供代課/調課建議
 
 function isSpecialDept(dept) {
   return SPECIAL_DEPTS.includes(dept);
@@ -499,13 +500,15 @@ setupSearch('swapTeacherSearch', 'swapTeacherDropdown', q => DATA.teachers.filte
 
 // ===== Schedule Rendering =====
 const DAY_NAMES = ['', '一', '二', '三', '四', '五'];
-const PERIOD_LABELS = ['第1節', '第2節', '第3節', '第4節', '第5節', '第6節', '第7節', '第8節'];
+// Display order: 1,2,3,4, 12(午休), 5,6,7,8
+const PERIOD_ORDER = [1, 2, 3, 4, 12, 5, 6, 7, 8];
+const PERIOD_LABELS = { 1:'第1節', 2:'第2節', 3:'第3節', 4:'第4節', 12:'午休', 5:'第5節', 6:'第6節', 7:'第7節', 8:'第8節' };
 
 function renderScheduleTable(entries, titlePrefix, targetName, highlightPeriods, mode) {
   const grid = {};
-  for (let p = 1; p <= 8; p++) { grid[p] = {}; for (let d = 1; d <= 5; d++) grid[p][d] = []; }
+  PERIOD_ORDER.forEach(p => { grid[p] = {}; for (let d = 1; d <= 5; d++) grid[p][d] = []; });
   entries.forEach(e => {
-    if (e.day_of_week >= 1 && e.day_of_week <= 5 && e.period >= 1 && e.period <= 8)
+    if (e.day_of_week >= 1 && e.day_of_week <= 5 && grid[e.period])
       grid[e.period][e.day_of_week].push(e);
   });
 
@@ -520,8 +523,13 @@ function renderScheduleTable(entries, titlePrefix, targetName, highlightPeriods,
   for (let d = 1; d <= 5; d++) html += `<th>星期${DAY_NAMES[d]}</th>`;
   html += `</tr>`;
 
-  for (let p = 1; p <= 8; p++) {
-    html += `<tr><td class="period-col">${PERIOD_LABELS[p-1]}</td>`;
+  for (const p of PERIOD_ORDER) {
+    // 午休列：只在有課程時才顯示
+    if (p === 12) {
+      const hasLunchClass = [1,2,3,4,5].some(d => grid[12][d].length > 0);
+      if (!hasLunchClass) continue;
+    }
+    html += `<tr><td class="period-col">${PERIOD_LABELS[p]}</td>`;
     for (let d = 1; d <= 5; d++) {
       const items = grid[p][d];
       const hl = highlightPeriods && highlightPeriods.includes(p) ? ' highlight-period' : '';
@@ -622,6 +630,15 @@ function querySubstitute() {
   }
 
   const absentDept = teacherEntries[0].belong_dep;
+
+  // 特教科不提供代課建議
+  if (BLOCKED_DEPTS.includes(absentDept)) {
+    let html = renderScheduleTable(teacherEntries, `請假教師課表（${absentDept}）`, absentTeacher, selectedPeriods, 'teacher');
+    html += `<div class="card"><div class="sub-section"><h3 class="no-match">特教科課程具專業性，請洽教學組或特教組安排代課。</h3></div></div>`;
+    document.getElementById('subResult').innerHTML = html;
+    return;
+  }
+
   const needSubEntries = teacherEntries.filter(e => e.day_of_week === day && selectedPeriods.includes(e.period));
 
   if (!needSubEntries.length) {
@@ -823,6 +840,15 @@ function querySwap() {
   }
 
   const absentDept = teacherEntries[0].belong_dep;
+
+  // 特教科不提供調課建議
+  if (BLOCKED_DEPTS.includes(absentDept)) {
+    let html = renderScheduleTable(teacherEntries, `請假教師課表（${absentDept}）`, absentTeacher, selectedPeriods, 'teacher');
+    html += `<div class="card"><div class="sub-section"><h3 class="no-match">特教科課程具專業性，請洽教學組或特教組安排調課。</h3></div></div>`;
+    document.getElementById('swapResult').innerHTML = html;
+    return;
+  }
+
   const needSubEntries = teacherEntries.filter(e => e.day_of_week === day && selectedPeriods.includes(e.period));
 
   // Show teacher schedule with highlights
