@@ -116,6 +116,7 @@ select:focus, input:focus { outline: none; border-color: var(--primary); box-sha
 .tag { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 12px; margin-left: 6px; }
 .tag-free { background: #E8F0E8; color: #3D6B4F; }
 .tag-homeroom { background: #E8EDF5; color: #4A5D80; }
+.tag-same-grade { background: #e0f2fe; color: #0369a1; margin-left: 4px; }
 
 /* Data stats */
 
@@ -589,6 +590,22 @@ function findConsecutiveGroups(periods, len) {
   return groups;
 }
 
+function extractGrade(className) {
+  const m = className.match(/[一二三]/);
+  return m ? m[0] : null;
+}
+
+function getTeacherGrades(teacherName) {
+  const grades = new Set();
+  DATA.teacherSchedule.forEach(r => {
+    if (r.target_name === teacherName && r.taught_name) {
+      const g = extractGrade(r.taught_name);
+      if (g) grades.add(g);
+    }
+  });
+  return grades;
+}
+
 function findFreeTeachers(day, periods, excludeTeacher) {
   const busyByPeriod = {};
   periods.forEach(p => {
@@ -600,13 +617,22 @@ function findFreeTeachers(day, periods, excludeTeacher) {
   return DATA.teachers.filter(t => t !== excludeTeacher && periods.every(p => !busyByPeriod[p].has(t)));
 }
 
-function renderSubList(teachers, teacherDeptMap, teacherSubjects, periodLabel, extraTag) {
+function renderSubList(teachers, teacherDeptMap, teacherSubjects, periodLabel, extraTag, targetGrade) {
+  let sorted = [...teachers];
+  const sameGradeSet = new Set();
+  if (targetGrade) {
+    sorted.forEach(t => {
+      if (getTeacherGrades(t).has(targetGrade)) sameGradeSet.add(t);
+    });
+    sorted.sort((a, b) => (sameGradeSet.has(a) ? 0 : 1) - (sameGradeSet.has(b) ? 0 : 1));
+  }
   let html = `<ul class="sub-list">`;
-  teachers.forEach(t => {
+  sorted.forEach(t => {
     const subjects = teacherSubjects[t] ? [...teacherSubjects[t]].filter(s => s !== '班會').join('、') : '';
     const tagClass = extraTag === '導師' ? 'tag-homeroom' : 'tag-free';
     const tagText = extraTag || periodLabel;
-    html += `<li><div><span class="sub-teacher-name">${t}</span> <span class="sub-teacher-dept">（${teacherDeptMap[t] || ''}）</span><span class="tag ${tagClass}">${tagText}</span></div><div class="sub-teacher-subjects">授課：${subjects}</div></li>`;
+    const gradeTag = sameGradeSet.has(t) ? '<span class="tag tag-same-grade">有任教同一年級</span>' : '';
+    html += `<li><div><span class="sub-teacher-name">${t}</span> <span class="sub-teacher-dept">（${teacherDeptMap[t] || ''}）</span><span class="tag ${tagClass}">${tagText}</span>${gradeTag}</div><div class="sub-teacher-subjects">授課：${subjects}</div></li>`;
   });
   html += `</ul>`;
   return html;
@@ -676,6 +702,10 @@ function querySubstitute() {
   const groupName = getGroupForDept(absentDept);
   let hasAnyMatch = false;
 
+  // 計算代課班級的年級（用於同年級優先排序）
+  const targetGrades = new Set(needSubEntries.map(e => extractGrade(e.taught_name)).filter(Boolean));
+  const targetGrade = targetGrades.size === 1 ? [...targetGrades][0] : null;
+
   // ===== Special dept logic: 健護/全民國防/音樂科 =====
   if (isSpecialDept(absentDept)) {
     // For each period, find homeroom teacher and second-priority teachers
@@ -725,14 +755,14 @@ function querySubstitute() {
     if (freeHomeroom.length > 0) {
       hasAnyMatch = true;
       html += `<div class="sub-section"><h3 class="priority-homeroom">優先建議：該班導師 — ${freeHomeroom.length} 位</h3>`;
-      html += renderSubList(freeHomeroom, teacherDeptMap, teacherSubjects, '所選節次皆空堂', '導師');
+      html += renderSubList(freeHomeroom, teacherDeptMap, teacherSubjects, '所選節次皆空堂', '導師', targetGrade);
       html += `</div>`;
     }
 
     if (freeSecond.length > 0) {
       hasAnyMatch = true;
       html += `<div class="sub-section"><h3 class="priority-2">其次建議：${secondLabel} — ${freeSecond.length} 位</h3>`;
-      html += renderSubList(freeSecond, teacherDeptMap, teacherSubjects, '所選節次皆空堂');
+      html += renderSubList(freeSecond, teacherDeptMap, teacherSubjects, '所選節次皆空堂', null, targetGrade);
       html += `</div>`;
     }
 
@@ -771,7 +801,7 @@ function querySubstitute() {
     if (sameDept.length > 0) {
       hasAnyMatch = true;
       html += `<div class="sub-section"><h3 class="priority-1">同科代課（${absentDept}）— ${pg.label} — ${sameDept.length} 位</h3>`;
-      html += renderSubList(sameDept, teacherDeptMap, teacherSubjects, pg.label);
+      html += renderSubList(sameDept, teacherDeptMap, teacherSubjects, pg.label, null, targetGrade);
       html += `</div>`;
       sameDept.forEach(t => shownSameDept.add(t));
     }
@@ -782,7 +812,7 @@ function querySubstitute() {
       if (sameGroup.length > 0) {
         hasAnyMatch = true;
         html += `<div class="sub-section"><h3 class="priority-2">同科群代課（${groupName}）— ${pg.label} — ${sameGroup.length} 位</h3>`;
-        html += renderSubList(sameGroup, teacherDeptMap, teacherSubjects, pg.label);
+        html += renderSubList(sameGroup, teacherDeptMap, teacherSubjects, pg.label, null, targetGrade);
         html += `</div>`;
         sameGroup.forEach(t => shownSameGroup.add(t));
       }
