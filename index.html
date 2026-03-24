@@ -206,11 +206,10 @@ select:focus, input:focus { outline: none; border-color: var(--primary); box-sha
       <h2>班級課表查詢</h2>
       <div class="form-row">
         <div>
-          <label>搜尋班級</label>
-          <div class="search-input-wrap">
-            <input type="text" id="classSearch" placeholder="輸入班級名稱..." autocomplete="off">
-            <div class="dropdown" id="classDropdown"></div>
-          </div>
+          <label>選擇班級</label>
+          <select id="classSelect">
+            <option value="">-- 請選擇班級 --</option>
+          </select>
         </div>
         <div>
           <button class="btn btn-primary" onclick="queryClassSchedule()">查詢</button>
@@ -451,6 +450,22 @@ function parseWorkbook(arrayBuffer) {
   updateUI();
 }
 
+function sortClasses(classes) {
+  const gradeOrder = { '一': 1, '二': 2, '三': 3 };
+  const classOrder = { '真': 1, '善': 2, '美': 3, '智': 4, '仁': 5 };
+  return [...classes].sort((a, b) => {
+    const gA = gradeOrder[a.match(/[一二三]/)?.[0]] || 9;
+    const gB = gradeOrder[b.match(/[一二三]/)?.[0]] || 9;
+    if (gA !== gB) return gA - gB;
+    const deptA = a.replace(/[一二三].*/, '');
+    const deptB = b.replace(/[一二三].*/, '');
+    if (deptA !== deptB) return deptA.localeCompare(deptB, 'zh-TW');
+    const cA = classOrder[a.slice(-1)] || 9;
+    const cB = classOrder[b.slice(-1)] || 9;
+    return cA - cB;
+  });
+}
+
 function updateUI() {
   if (DATA.academicYear) {
     document.getElementById('semesterInfo').textContent = `${DATA.academicYear} 學年度 第 ${DATA.semester} 學期`;
@@ -466,6 +481,22 @@ function updateUI() {
   // Reset teacher select
   document.getElementById('teacherSelect').innerHTML = '<option value="">-- 請先選擇科別 --</option>';
 
+  // Class select — sorted by grade, then dept, then 真→善→美→智→仁
+  const classSel = document.getElementById('classSelect');
+  classSel.innerHTML = '<option value="">-- 請選擇班級 --</option>';
+  const sorted = sortClasses(DATA.classes);
+  const gradeLabels = { '一': '一年級', '二': '二年級', '三': '三年級' };
+  let currentGrade = '';
+  sorted.forEach(c => {
+    const g = c.match(/[一二三]/)?.[0] || '';
+    if (g !== currentGrade) {
+      if (currentGrade) classSel.innerHTML += '</optgroup>';
+      classSel.innerHTML += `<optgroup label="${gradeLabels[g] || '其他'}">`;
+      currentGrade = g;
+    }
+    classSel.innerHTML += `<option value="${c}">${c}</option>`;
+  });
+  if (currentGrade) classSel.innerHTML += '</optgroup>';
 }
 
 // ===== Dept -> Teacher linked dropdown =====
@@ -504,7 +535,7 @@ function setupSearch(inputId, dropdownId, getItems) {
   input.addEventListener('keydown', e => { if (e.key === 'Enter') dd.classList.remove('show'); });
 }
 
-setupSearch('classSearch', 'classDropdown', q => DATA.classes.filter(c => c.includes(q)).slice(0, 20));
+// classSearch removed — now using classSelect dropdown
 setupSearch('subTeacherSearch', 'subTeacherDropdown', q => DATA.teachers.filter(t => t.includes(q)).slice(0, 20));
 setupSearch('swapTeacherSearch', 'swapTeacherDropdown', q => DATA.teachers.filter(t => t.includes(q)).slice(0, 20));
 
@@ -577,7 +608,7 @@ function queryTeacherSchedule() {
 
 // ===== Class Schedule =====
 function queryClassSchedule() {
-  const name = document.getElementById('classSearch').value.trim();
+  const name = document.getElementById('classSelect').value;
   if (!name) { alert('請輸入班級名稱'); return; }
   const entries = DATA.classSchedule.filter(r => r.target_name === name);
   if (!entries.length) {
